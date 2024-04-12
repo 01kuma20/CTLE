@@ -8,7 +8,7 @@ from sklearn.utils import shuffle
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 
-from utils import next_batch, create_src_trg, weight_init, top_n_accuracy
+from CTLE.utils import next_batch, create_src_trg, weight_init, top_n_accuracy
 
 
 def seq2seq_forward(encoder, decoder, lstm_input, valid_len, pre_len):

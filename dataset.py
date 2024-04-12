@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from utils import gen_index_map
+from CTLE.utils import gen_index_map
 
 
 class Dataset:
@@ -13,7 +13,7 @@ class Dataset:
             Should have at least three columns: user_id, latlng and datetime.
         @param coor_df: DataFrame containing coordinate information.
             With an index corresponding to latlng, and two columns: lat and lng.
-        """
+
         self.latlng2index = gen_index_map(raw_df, 'latlng')
         self.user2index = gen_index_map(raw_df, 'user_id')
         raw_df['loc_index'] = raw_df['latlng'].map(self.latlng2index)
@@ -24,6 +24,19 @@ class Dataset:
         self.num_user = len(self.user2index)
         self.num_loc = len(self.latlng2index)
         self.split_days = split_days
+        """
+        
+        self.latlng2index = gen_index_map(raw_df, 'poi_id')
+        self.user2index = gen_index_map(raw_df, 'user_id')
+        raw_df['user_index'] = raw_df['user_id'].map(self.user2index)
+        raw_df = raw_df.merge(coor_df, on='poi_id', how='left')
+        raw_df = raw_df.rename(columns={"poi_id": "loc_index"})
+        self.df = raw_df[['user_index', 'loc_index', 'datetime', 'lat', 'lng']]
+
+        self.num_user = len(self.user2index)
+        self.num_loc = len(self.latlng2index)
+        self.split_days = split_days    
+        
 
     def gen_sequence(self, min_len=0, select_days=None, include_delta=False):
         """
