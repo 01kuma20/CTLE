@@ -35,7 +35,7 @@ coor_df = pd.read_hdf(os.path.join('CTLE/data', '{}.h5'.format(dataset_name)), k
 
 split_days = [list(range(16, 23)), list(range(23, 25)), list(range(25, 27))]
 if dataset_name == 'pek':
-    split_days = [list(range(10, 13)), [13], [14]]
+    split_days = [list(range(9, 12)), [12], [13]]
 dataset = Dataset(raw_df, coor_df, split_days)
 max_seq_len = Counter(dataset.df['user_index'].to_list()).most_common(1)[0][1]
 id2coor_df = dataset.df[['loc_index', 'lat', 'lng']].drop_duplicates('loc_index').set_index('loc_index').sort_index()
