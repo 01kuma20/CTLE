@@ -393,3 +393,8 @@ def mc_next_loc_prediction(dataset, pre_model, pre_len):
     precision, f1 = precision_score(labels, pres, average='micro'), f1_score(labels, pres, average='micro')
     print('Acc %.6f, Recall %.6f' % (acc, recall))
     print('Pre %.6f, f1 %.6f' % (precision, f1))
+
+# 書き換える
+class BERTPredictor(nn.Module, ABC):
+    def __init__(self, num_loc):
+        self.transfer_mat = np.zeros((num_loc, num_loc))
