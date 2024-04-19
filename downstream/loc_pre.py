@@ -10,6 +10,8 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from CTLE.utils import next_batch, create_src_trg, weight_init, top_n_accuracy
 
+from transformers import BertModel, BertConfig
+
 
 def seq2seq_forward(encoder, decoder, lstm_input, valid_len, pre_len):
     his_len = valid_len - pre_len
@@ -292,9 +294,40 @@ class RnnLocPredictor(nn.Module, ABC):
             rnn_out_pre = rnn_forward(self.encoder, self.sos, full_embed, valid_len, pre_len)
         out = self.out_linear(rnn_out_pre)
         return out
+    
+# 追加
+class BertLocPredictor(nn.Module):
+    def __init__(self, embed_layer, input_size, fc_hidden_size, output_size, num_layers):
+        print("check1")
+        super().__init__()
+        self.bert_config = BertConfig(hidden_size=input_size, num_hidden_layers=num_layers, num_attention_heads=num_layers, intermediate_size=fc_hidden_size)
+        self.bert = BertModel(self.bert_config)
+        
+        # 外部から受け取ったカスタムEmbedding層をBERTモデルのEmbeddingに置き換える
+        self.bert.embeddings = embed_layer
+        
+        # BERTの最後の隠れ層の出力を使用して最終的な出力サイズにマッピングするための線形層
+        self.out_linear = nn.Sequential(
+            nn.Linear(input_size, fc_hidden_size),
+            nn.ReLU(),
+            nn.Linear(fc_hidden_size, output_size)
+        )
+    
+    def forward(self, input_ids, attention_mask=None):
+        # BERTモデルの出力を取得
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        
+        # `last_hidden_state`からシーケンスの最後の隠れ層を取得
+        sequence_output = outputs.last_hidden_state
+        
+        # 出力層に適用
+        out = self.out_linear(sequence_output[:, 0, :])  # [CLS]トークンの出力を使用
+        return out
+
 
 
 def loc_prediction(dataset, pre_model, pre_len, num_epoch, batch_size, device):
+    print("check3")
     pre_model = pre_model.to(device)
     optimizer = torch.optim.Adam(pre_model.parameters(), lr=1e-4)
     loss_func = nn.CrossEntropyLoss()
@@ -356,6 +389,7 @@ def loc_prediction(dataset, pre_model, pre_len, num_epoch, batch_size, device):
     nni.report_final_result(best_acc)
 
 
+# モンテカルロ系の処理(NN系とは分ける必要がある)
 class MCLocPredictor:
     def __init__(self, num_loc):
         self.transfer_mat = np.zeros((num_loc, num_loc))
@@ -393,8 +427,3 @@ def mc_next_loc_prediction(dataset, pre_model, pre_len):
     precision, f1 = precision_score(labels, pres, average='micro'), f1_score(labels, pres, average='micro')
     print('Acc %.6f, Recall %.6f' % (acc, recall))
     print('Pre %.6f, f1 %.6f' % (precision, f1))
-
-# 書き換える
-class BERTPredictor(nn.Module, ABC):
-    def __init__(self, num_loc):
-        self.transfer_mat = np.zeros((num_loc, num_loc))
