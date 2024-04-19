@@ -5,9 +5,10 @@ import numpy as np
 import torch
 from torch import nn
 from sklearn.utils import shuffle
-
+'''
 from CTLE.utils import next_batch, weight_init
-
+'''
+from utils import next_batch, weight_init
 
 def gen_random_mask(src_valid_lens, src_len, mask_prop):
     """

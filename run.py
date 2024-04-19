@@ -3,6 +3,16 @@ from collections import Counter
 
 import pandas as pd
 
+from dataset import Dataset
+from downstream.loc_pre import *
+from embed.ctle import CTLE, train_ctle, CTLEEmbedding, PositionalEncoding, TemporalEncoding, MaskedLM, MaskedHour
+from embed.hier import HierEmbedding, Hier, train_hier
+from embed.static import DownstreamEmbed, StaticEmbed
+from embed.tale import TaleData, Tale, train_tale
+from embed.w2v import SkipGramData, SkipGram, train_skipgram
+from embed.teaser import TeaserData, Teaser, train_teaser
+from embed.poi2vec import P2VData, POI2Vec
+'''
 from CTLE.dataset import Dataset
 from CTLE.downstream.loc_pre import *
 from CTLE.embed.ctle import CTLE, train_ctle, CTLEEmbedding, PositionalEncoding, TemporalEncoding, MaskedLM, MaskedHour
@@ -12,8 +22,7 @@ from CTLE.embed.tale import TaleData, Tale, train_tale
 from CTLE.embed.w2v import SkipGramData, SkipGram, train_skipgram
 from CTLE.embed.teaser import TeaserData, Teaser, train_teaser
 from CTLE.embed.poi2vec import P2VData, POI2Vec
-
-
+'''
 #★★★★★★general setting★★★★★★
 param = nni.get_next_parameter() #→{}
 device = 'cuda:0'
@@ -31,11 +40,12 @@ init_param = param.get('init_param', False)
 
 hidden_size = embed_size * 4
 
-print("check2")
-
 #★★★★★★data setting★★★★★★
-raw_df = pd.read_hdf(os.path.join('CTLE/data', '{}.h5'.format(dataset_name)), key='data')
-coor_df = pd.read_hdf(os.path.join('CTLE/data', '{}.h5'.format(dataset_name)), key='poi')
+# Path = "CTLE/"
+Path = "./"
+
+raw_df = pd.read_hdf(os.path.join(Path + 'data', '{}.h5'.format(dataset_name)), key='data')
+coor_df = pd.read_hdf(os.path.join(Path + 'data', '{}.h5'.format(dataset_name)), key='poi')
 
 split_days = [list(range(16, 23)), list(range(23, 25)), list(range(25, 27))]
 if dataset_name == 'pek':
@@ -128,40 +138,40 @@ if embed_name == 'ctle':
 
 #★★★★★★ downstream layer ★★★★★★
 if task_name == 'loc_pre':
-    pre_model_name = param.get('pre_model_name', 'mc')
-    # pre_model_name = param.get('pre_model_name', 'bert')
+    pre_model_name = param.get('pre_model_name', 'bert')
     pre_model_seq2seq = param.get('pre_model_seq2seq', True)
     if pre_model_name == 'mc':
         pre_model = MCLocPredictor(dataset.num_loc)
         mc_next_loc_prediction(dataset, pre_model, pre_len)
-    else:
-        # 追加
-        if pre_model_name == 'bert':
-            pre_model = BertLocPredictor(embed_layer, input_size=embed_size, fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2)
-        
-        # st_aux_embed_size = int(param.get('st_aux_embed_size', 16))
-        # st_num_slots = int(param.get('st_num_slots', 10))
+    else:        
+        st_aux_embed_size = int(param.get('st_aux_embed_size', 16))
+        st_num_slots = int(param.get('st_num_slots', 10))
 
-        # if pre_model_name == 'erpp':
-        #     pre_model = ErppLocPredictor(embed_layer, input_size=embed_size, lstm_hidden_size=hidden_size,
-        #                                  fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2, seq2seq=pre_model_seq2seq)
-        # elif pre_model_name == 'stlstm':
-        #     pre_model = StlstmLocPredictor(embed_layer, num_slots=st_num_slots, aux_embed_size=st_aux_embed_size, time_thres=10800, dist_thres=0.1,
-        #                                    input_size=embed_size, lstm_hidden_size=hidden_size,
-        #                                    fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2, seq2seq=pre_model_seq2seq)
-        # elif pre_model_name == 'strnn':
-        #     st_time_window = param.get('st_time_window', 7200)
-        #     st_dist_window = param.get('st_dist_window', 0.1)
-        #     st_inter_size = int(param.get('st_inter_size', 4))
-        #     pre_model = StrnnLocPredictor(embed_layer, num_slots=st_num_slots,
-        #                                   time_window=st_time_window, dist_window=st_dist_window,
-        #                                   input_size=embed_size, hidden_size=hidden_size,
-        #                                   inter_size=st_inter_size, output_size=dataset.num_loc)
-        # elif pre_model_name == 'rnn':
-        #     pre_model = RnnLocPredictor(embed_layer, input_size=embed_size, rnn_hidden_size=hidden_size, fc_hidden_size=hidden_size,
-        #                                 output_size=dataset.num_loc, num_layers=1, seq2seq=pre_model_seq2seq)
-        # else:
-        #     pre_model = Seq2SeqLocPredictor(embed_layer, input_size=embed_size, hidden_size=hidden_size,
-        #                                     output_size=dataset.num_loc, num_layers=2)
+        if pre_model_name == 'erpp':
+            pre_model = ErppLocPredictor(embed_layer, input_size=embed_size, lstm_hidden_size=hidden_size,
+                                         fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2, seq2seq=pre_model_seq2seq)
+        elif pre_model_name == 'stlstm':
+            pre_model = StlstmLocPredictor(embed_layer, num_slots=st_num_slots, aux_embed_size=st_aux_embed_size, time_thres=10800, dist_thres=0.1,
+                                           input_size=embed_size, lstm_hidden_size=hidden_size,
+                                           fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2, seq2seq=pre_model_seq2seq)
+        elif pre_model_name == 'strnn':
+            st_time_window = param.get('st_time_window', 7200)
+            st_dist_window = param.get('st_dist_window', 0.1)
+            st_inter_size = int(param.get('st_inter_size', 4))
+            pre_model = StrnnLocPredictor(embed_layer, num_slots=st_num_slots,
+                                          time_window=st_time_window, dist_window=st_dist_window,
+                                          input_size=embed_size, hidden_size=hidden_size,
+                                          inter_size=st_inter_size, output_size=dataset.num_loc)
+        elif pre_model_name == 'rnn':
+            pre_model = RnnLocPredictor(embed_layer, input_size=embed_size, rnn_hidden_size=hidden_size, fc_hidden_size=hidden_size,
+                                        output_size=dataset.num_loc, num_layers=1, seq2seq=pre_model_seq2seq)
+        # 追加
+        elif pre_model_name == 'bert':
+            pre_model = BertLocPredictor(embed_layer, input_size=embed_size, fc_hidden_size=hidden_size, output_size=dataset.num_loc, num_layers=2)
+            
+        else:
+            pre_model = Seq2SeqLocPredictor(embed_layer, input_size=embed_size, hidden_size=hidden_size,
+                                            output_size=dataset.num_loc, num_layers=2)
+            
         loc_prediction(dataset, pre_model, pre_len=pre_len, num_epoch=task_epoch,
                        batch_size=64, device=device)

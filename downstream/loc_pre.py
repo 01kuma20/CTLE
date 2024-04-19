@@ -7,9 +7,10 @@ from sklearn.metrics import accuracy_score, recall_score, f1_score, precision_sc
 from sklearn.utils import shuffle
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
-
+'''
 from CTLE.utils import next_batch, create_src_trg, weight_init, top_n_accuracy
-
+'''
+from utils import next_batch, create_src_trg, weight_init, top_n_accuracy
 from transformers import BertModel, BertConfig
 
 
@@ -298,7 +299,6 @@ class RnnLocPredictor(nn.Module, ABC):
 # 追加
 class BertLocPredictor(nn.Module):
     def __init__(self, embed_layer, input_size, fc_hidden_size, output_size, num_layers):
-        print("check1")
         super().__init__()
         self.bert_config = BertConfig(hidden_size=input_size, num_hidden_layers=num_layers, num_attention_heads=num_layers, intermediate_size=fc_hidden_size)
         self.bert = BertModel(self.bert_config)
@@ -313,7 +313,7 @@ class BertLocPredictor(nn.Module):
             nn.Linear(fc_hidden_size, output_size)
         )
     
-    def forward(self, input_ids, attention_mask=None):
+    def forward(self, input_ids, attention_mask=None, **kwargs):
         # BERTモデルの出力を取得
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         
@@ -327,7 +327,6 @@ class BertLocPredictor(nn.Module):
 
 
 def loc_prediction(dataset, pre_model, pre_len, num_epoch, batch_size, device):
-    print("check3")
     pre_model = pre_model.to(device)
     optimizer = torch.optim.Adam(pre_model.parameters(), lr=1e-4)
     loss_func = nn.CrossEntropyLoss()
@@ -353,8 +352,9 @@ def loc_prediction(dataset, pre_model, pre_len, num_epoch, batch_size, device):
         full_lat = _create_src_trg(lat, 0)
         full_lng = _create_src_trg(lng, 0)
 
-        out = pre_model(full_seq, length, pre_len, user_index=user_index, timestamp=full_t,
-                        time_delta=full_time_delta, dist=full_dist, lat=full_lat, lng=full_lng)
+        out = pre_model(full_seq, length, pre_len, 
+                        user_index=user_index, timestamp=full_t,time_delta=full_time_delta, dist=full_dist, lat=full_lat, lng=full_lng)
+        
         out = out.reshape(-1, pre_model.output_size)
         label = trg_seq.reshape(-1)
         return out, label

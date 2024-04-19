@@ -2,8 +2,10 @@ import os
 
 import numpy as np
 import pandas as pd
-
+'''
 from CTLE.utils import gen_index_map
+'''
+from utils import gen_index_map
 
 
 class Dataset:
