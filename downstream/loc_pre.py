@@ -300,6 +300,7 @@ class RnnLocPredictor(nn.Module, ABC):
 class BertLocPredictor(nn.Module):
     def __init__(self, embed_layer, input_size, fc_hidden_size, output_size, num_layers):
         super().__init__()
+        self.input_size = input_size
         self.bert_config = BertConfig(hidden_size=input_size, num_hidden_layers=num_layers, num_attention_heads=num_layers, intermediate_size=fc_hidden_size)
         self.bert = BertModel(self.bert_config)
         
@@ -312,16 +313,55 @@ class BertLocPredictor(nn.Module):
             nn.ReLU(),
             nn.Linear(fc_hidden_size, output_size)
         )
-    
-    def forward(self, input_ids, attention_mask=None, **kwargs):
+        
+        # embeddingを2回指定そう。()
+    def forward(self, full_seq, valid_len, pre_len, attention_mask=None, **kwargs):
+        batch_size = full_seq.size(0)
+        history_len = valid_len - pre_len
+        max_len = history_len.max()
+
+        # Generate input sequence.
+        full_embed = self.bert.embeddings(full_seq, downstream=True, pre_len=pre_len, **kwargs)  # (batch, seq_len, embed_size)
+        timestamp = kwargs['timestamp']  # (batch, seq_len)
+        lat, lng = kwargs['lat'], kwargs['lng']  # (batch, seq_len)
+        cat_input = torch.cat([full_embed, timestamp.unsqueeze(-1),
+                               lat.unsqueeze(-1), lng.unsqueeze(-1)], dim=-1)  # (batch, seq_len, input_size + 3)
+        # After this process, the gap between input sequences will be filled.
+        sequential_input = torch.stack([torch.cat([cat_input[i, :s], cat_input[i, -pre_len:],
+                                                   torch.zeros(max_len - s, self.input_size + 3).float().to(full_seq.device)], dim=0)
+                                        for i, s in enumerate(history_len)], dim=0)  # (batch, seq_len, input_size + 3)
+        seq_len = sequential_input.size(1)
+
+        # Calculate a context mask from a given time window.
+        seq_timestamp = sequential_input[:, :, -3]  # (batch, seq_len)
+        time_delta = seq_timestamp.unsqueeze(-1) - seq_timestamp.unsqueeze(1)
+        context_mask = (time_delta <= self.time_window) * \
+                       (time_delta >= 0) * \
+                       (valid_len.unsqueeze(-1) > torch.arange(seq_len).to(full_seq.device).unsqueeze(0).repeat(batch_size, 1)).unsqueeze(1)  # (batch, seq_len, seq_len)
+
+        # Calculate distances between locations in the trajectory.
+        seq_latlng = sequential_input[:, :, -2:]  # (batch, seq_len, 2)
+        # (batch, seq_len, 1, 2) - # (batch, 1, seq_len, 2) -> # (batch, seq_len, seq_len, 2)
+        dist = (seq_latlng.unsqueeze(2) - seq_latlng.unsqueeze(1)) ** 2
+        dist = torch.sqrt(dist.sum(-1))  # (batch, seq_len, seq_len)
+
         # BERTモデルの出力を取得
-        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        outputs = self.bert(input_ids=sequential_input, attention_mask=attention_mask)
         
         # `last_hidden_state`からシーケンスの最後の隠れ層を取得
         sequence_output = outputs.last_hidden_state
         
         # 出力層に適用
         out = self.out_linear(sequence_output[:, 0, :])  # [CLS]トークンの出力を使用
+
+        # rnn_out, _ = self.encoder(sequential_input[:, :, :-3],
+        #                           torch.floor(torch.clamp(time_delta, 0, self.time_window) /
+        #                                       self.time_window * self.num_slots).long(),
+        #                           torch.floor(torch.clamp(dist, 0, self.dist_window) /
+        #                                       self.dist_window * self.num_slots).long(),
+        #                           context_mask)
+        # rnn_out_pre = torch.stack([rnn_out[i, s - pre_len-1:s-1] for i, s in enumerate(valid_len)])  # (batch, pre_len, lstm_hidden_size)
+        # out = self.out_linear(rnn_out_pre)
         return out
 
 
@@ -352,6 +392,7 @@ def loc_prediction(dataset, pre_model, pre_len, num_epoch, batch_size, device):
         full_lat = _create_src_trg(lat, 0)
         full_lng = _create_src_trg(lng, 0)
 
+       # エラー箇所。 full_seq, length, pre_lenとは何か・
         out = pre_model(full_seq, length, pre_len, 
                         user_index=user_index, timestamp=full_t,time_delta=full_time_delta, dist=full_dist, lat=full_lat, lng=full_lng)
         
